@@ -20,7 +20,6 @@
         "moduleResolution": "node",
         "resolveJsonModule": true,
         "baseUrl": "./",
-        "outDir": "dist",
         "types": []
     },
     "exclude": [
