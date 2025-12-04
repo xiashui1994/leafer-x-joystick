@@ -36,6 +36,7 @@
   "bugs": "https://github.com/xiashui1994/leafer-x-joystick/issues",
   "scripts": {
     "start": "cross-env NODE_ENV=development rollup -c -w",
+    "example": "cross-env NODE_ENV=development rollup -c",
     "build": "cross-env PLATFORM=all rollup -c",
     "test": "vitest"
   },

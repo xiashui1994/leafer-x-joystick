@@ -49,6 +49,49 @@ let config
 
 if (isDev) {
 
+    const devPlugins = [
+        ...plugins,
+        html({
+            title: "Leafer Plugin",
+            meta: [{ charset: 'utf-8' }, { name: 'viewport', content: 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' }],
+            template: ({ title, meta }) => {
+                // 生成 meta 标签字符串
+                const metaTags = meta.map(m => `<meta ${Object.entries(m).map(([k, v]) => `${k}="${v}"`).join(' ')}>`).join('\n')
+
+                return `
+                    <!DOCTYPE html>
+                    <html lang="zh-CN">
+                        <head>
+                            ${metaTags}
+                            <title>${title}</title>
+                            <style>
+                                html, body {
+                                    margin: 0;
+                                    padding: 0;
+                                    width: 100%;
+                                    height: 100%;
+                                    overflow: hidden;
+                                    touch-action: none;
+                                    background: #f5f5f5;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <script type="module" src="bundle.js"></script>
+                        </body>
+                    </html>
+                `
+            }
+        }),
+        copy({ targets: [{ src: 'public/*', dest: 'dev/' }] }),
+    ]
+
+    // 只在 -w 模式下添加 livereload 和 serve
+    if (process.argv.includes('-w')) {
+        devPlugins.push(livereload())
+        devPlugins.push(serve({ contentBase: ['dev/'], port }))
+    }
+
     config = {
         input: 'main.ts',
         output: {
@@ -56,44 +99,7 @@ if (isDev) {
             format: 'esm'
         },
         watch: { exclude: ['node_modules/**'] },
-        plugins: [
-            ...plugins,
-            html({
-                title: "Leafer Plugin",
-                meta: [{ charset: 'utf-8' }, { name: 'viewport', content: 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no' }],
-                template: ({ title, meta }) => {
-                    // 生成 meta 标签字符串
-                    const metaTags = meta.map(m => `<meta ${Object.entries(m).map(([k, v]) => `${k}="${v}"`).join(' ')}>`).join('\n')
-
-                    return `
-                        <!DOCTYPE html>
-                        <html lang="zh-CN">
-                            <head>
-                                ${metaTags}
-                                <title>${title}</title>
-                                <style>
-                                    html, body {
-                                        margin: 0;
-                                        padding: 0;
-                                        width: 100%;
-                                        height: 100%;
-                                        overflow: hidden;
-                                        touch-action: none;
-                                        background: #f5f5f5;
-                                    }
-                                </style>
-                            </head>
-                            <body>
-                                <script type="module" src="bundle.js"></script>
-                            </body>
-                        </html>
-                    `
-                }
-            }),
-            copy({ targets: [{ src: 'public/*', dest: 'dev/' }] }),
-            livereload(),
-            serve({ contentBase: ['dev/'], port })
-        ]
+        plugins: devPlugins
     }
 
 } else {
