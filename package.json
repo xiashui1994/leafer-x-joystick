@@ -1,6 +1,6 @@
 {
   "name": "leafer-x-joystick",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "基于 Leafer 框架的虚拟摇杆插件，支持触摸和鼠标交互",
   "author": "xiashui",
   "license": "MIT",
