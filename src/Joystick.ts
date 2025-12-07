@@ -17,6 +17,10 @@ export class Joystick extends Group {
 
     innerAlphaStandby = 0.5
 
+    // 私有状态
+    private isDragging = false
+    private startPosition: IPointData = { x: 0, y: 0 }
+
     constructor(opts: JoystickSettings = {}) {
         super()
 
@@ -24,6 +28,7 @@ export class Joystick extends Group {
             {
                 outerScale: { x: 1, y: 1 },
                 innerScale: { x: 1, y: 1 },
+                multiTouch: false, // 多指触摸模式
             },
             opts,
         )
@@ -98,157 +103,168 @@ export class Joystick extends Group {
      * 绑定交互事件
      */
     protected bindEvents() {
+        // 多指模式下不绑定自动事件
+        if (this.settings.multiTouch) return
+
         // 启用交互
         this.cursor = 'pointer'
 
-        let dragging = false
-        let startPosition: IPointData = { x: 0, y: 0 }
-        let power = 0
+        // 监听事件
+        this.on(LeaferPointerEvent.DOWN, () => this.startDrag())
+        this.on(LeaferPointerEvent.UP, () => this.endDrag())
+        this.on(LeaferPointerEvent.MOVE, (event: LeaferPointerEvent) => {
+            const localPoint = this.getInnerPoint({ x: event.x, y: event.y })
+            this.updatePosition(localPoint.x, localPoint.y)
+        })
+    }
 
-        const onDragStart = () => {
-            // 计算缩放后的外圈尺寸
-            const outerScaledWidth = (this.outer.width || 0) * this.outer.scaleX
-            const outerScaledHeight = (this.outer.height || 0) * this.outer.scaleY
+    /**
+     * 开始拖拽（私有方法，两种模式共享）
+     */
+    private startDrag() {
+        // 计算缩放后的外圈尺寸
+        const outerScaledWidth = (this.outer.width || 0) * this.outer.scaleX
+        const outerScaledHeight = (this.outer.height || 0) * this.outer.scaleY
 
-            // 起始位置是外圈中心（基于缩放后的尺寸）
-            startPosition = {
-                x: outerScaledWidth / 2,
-                y: outerScaledHeight / 2
-            }
-
-            dragging = true
-            this.inner.opacity = 1
-
-            this.settings.onStart?.()
+        // 起始位置是外圈中心
+        this.startPosition = {
+            x: outerScaledWidth / 2,
+            y: outerScaledHeight / 2
         }
 
-        const onDragEnd = () => {
-            if (!dragging) return
+        this.isDragging = true
+        this.inner.opacity = 1
 
-            // 计算缩放后的尺寸
-            const outerScaledWidth = (this.outer.width || 0) * this.outer.scaleX
-            const outerScaledHeight = (this.outer.height || 0) * this.outer.scaleY
+        this.settings.onStart?.()
+    }
 
-            // 重置内圈位置到中心
-            this.inner.x = outerScaledWidth / 2 - this.innerRadius
-            this.inner.y = outerScaledHeight / 2 - this.innerRadius
+    /**
+     * 结束拖拽（私有方法，两种模式共享）
+     */
+    private endDrag() {
+        if (!this.isDragging) return
 
-            dragging = false
-            this.inner.opacity = this.innerAlphaStandby
+        // 计算缩放后的尺寸
+        const outerScaledWidth = (this.outer.width || 0) * this.outer.scaleX
+        const outerScaledHeight = (this.outer.height || 0) * this.outer.scaleY
 
-            this.settings.onEnd?.()
-        }
+        // 重置内圈位置到中心
+        this.inner.x = outerScaledWidth / 2 - this.innerRadius
+        this.inner.y = outerScaledHeight / 2 - this.innerRadius
 
-        const onDragMove = (event: LeaferPointerEvent) => {
-            if (!dragging) return
+        this.isDragging = false
+        this.inner.opacity = this.innerAlphaStandby
 
-            const newPosition = this.getInnerPoint({ x: event.x, y: event.y })
+        this.settings.onEnd?.()
+    }
 
-            const sideX = newPosition.x - startPosition.x
-            const sideY = newPosition.y - startPosition.y
+    /**
+     * 更新位置（私有方法，核心计算逻辑，两种模式共享）
+     * @param localX 相对于 Joystick 的 x 坐标
+     * @param localY 相对于 Joystick 的 y 坐标
+     */
+    private updatePosition(localX: number, localY: number) {
+        if (!this.isDragging) return
 
-            const centerPoint: IPointData = { x: 0, y: 0 }
-            let angle = 0
+        const sideX = localX - this.startPosition.x
+        const sideY = localY - this.startPosition.y
 
-            if (sideX === 0 && sideY === 0) return
+        const centerPoint: IPointData = { x: 0, y: 0 }
+        let angle = 0
 
-            let direction = Direction.LEFT
+        if (sideX === 0 && sideY === 0) return
 
-            // 处理垂直方向
-            if (sideX === 0) {
-                if (sideY > 0) {
-                    centerPoint.y = sideY > this.outerRadius ? this.outerRadius : sideY
-                    angle = 270
-                    direction = Direction.BOTTOM
-                }
-                else {
-                    centerPoint.y = -(Math.abs(sideY) > this.outerRadius ? this.outerRadius : Math.abs(sideY))
-                    angle = 90
-                    direction = Direction.TOP
-                }
-                this.inner.x = startPosition.x + centerPoint.x - this.innerRadius
-                this.inner.y = startPosition.y + centerPoint.y - this.innerRadius
-                power = this.getPower(centerPoint)
-                this.settings.onChange?.({ angle, direction, power })
-                return
-            }
+        let direction = Direction.LEFT
 
-            // 处理水平方向
-            if (sideY === 0) {
-                if (sideX > 0) {
-                    centerPoint.x = Math.abs(sideX) > this.outerRadius ? this.outerRadius : Math.abs(sideX)
-                    angle = 0
-                    direction = Direction.RIGHT
-                }
-                else {
-                    centerPoint.x = -(Math.abs(sideX) > this.outerRadius ? this.outerRadius : Math.abs(sideX))
-                    angle = 180
-                    direction = Direction.LEFT
-                }
-
-                this.inner.x = startPosition.x + centerPoint.x - this.innerRadius
-                this.inner.y = startPosition.y + centerPoint.y - this.innerRadius
-                power = this.getPower(centerPoint)
-                this.settings.onChange?.({ angle, direction, power })
-                return
-            }
-
-            // 处理斜向方向
-            const tanVal = Math.abs(sideY / sideX)
-            const radian = Math.atan(tanVal)
-            angle = (radian * 180) / Math.PI
-
-            let centerX = 0
-            let centerY = 0
-
-            if (sideX * sideX + sideY * sideY >= this.outerRadius * this.outerRadius) {
-                centerX = this.outerRadius * Math.cos(radian)
-                centerY = this.outerRadius * Math.sin(radian)
+        // 处理垂直方向
+        if (sideX === 0) {
+            if (sideY > 0) {
+                centerPoint.y = sideY > this.outerRadius ? this.outerRadius : sideY
+                angle = 270
+                direction = Direction.BOTTOM
             }
             else {
-                centerX = Math.abs(sideX) > this.outerRadius ? this.outerRadius : Math.abs(sideX)
-                centerY = Math.abs(sideY) > this.outerRadius ? this.outerRadius : Math.abs(sideY)
+                centerPoint.y = -(Math.abs(sideY) > this.outerRadius ? this.outerRadius : Math.abs(sideY))
+                angle = 90
+                direction = Direction.TOP
             }
-
-            if (sideY < 0) {
-                centerY = -Math.abs(centerY)
-            }
-            if (sideX < 0) {
-                centerX = -Math.abs(centerX)
-            }
-
-            // 计算角度（0-360）
-            if (sideX > 0 && sideY < 0) {
-                // < 90
-            }
-            else if (sideX < 0 && sideY < 0) {
-                // 90 ~ 180
-                angle = 180 - angle
-            }
-            else if (sideX < 0 && sideY > 0) {
-                // 180 ~ 270
-                angle = angle + 180
-            }
-            else if (sideX > 0 && sideY > 0) {
-                // 270 ~ 360
-                angle = 360 - angle
-            }
-
-            centerPoint.x = centerX
-            centerPoint.y = centerY
-            power = this.getPower(centerPoint)
-
-            direction = this.getDirection(centerPoint)
-            this.inner.x = startPosition.x + centerPoint.x - this.innerRadius
-            this.inner.y = startPosition.y + centerPoint.y - this.innerRadius
-
+            this.inner.x = this.startPosition.x + centerPoint.x - this.innerRadius
+            this.inner.y = this.startPosition.y + centerPoint.y - this.innerRadius
+            const power = this.getPower(centerPoint)
             this.settings.onChange?.({ angle, direction, power })
+            return
         }
 
-        // 监听事件
-        this.on(LeaferPointerEvent.DOWN, onDragStart)
-        this.on(LeaferPointerEvent.UP, onDragEnd)
-        this.on(LeaferPointerEvent.MOVE, onDragMove)
+        // 处理水平方向
+        if (sideY === 0) {
+            if (sideX > 0) {
+                centerPoint.x = Math.abs(sideX) > this.outerRadius ? this.outerRadius : Math.abs(sideX)
+                angle = 0
+                direction = Direction.RIGHT
+            }
+            else {
+                centerPoint.x = -(Math.abs(sideX) > this.outerRadius ? this.outerRadius : Math.abs(sideX))
+                angle = 180
+                direction = Direction.LEFT
+            }
+
+            this.inner.x = this.startPosition.x + centerPoint.x - this.innerRadius
+            this.inner.y = this.startPosition.y + centerPoint.y - this.innerRadius
+            const power = this.getPower(centerPoint)
+            this.settings.onChange?.({ angle, direction, power })
+            return
+        }
+
+        // 处理斜向方向
+        const tanVal = Math.abs(sideY / sideX)
+        const radian = Math.atan(tanVal)
+        angle = (radian * 180) / Math.PI
+
+        let centerX = 0
+        let centerY = 0
+
+        if (sideX * sideX + sideY * sideY >= this.outerRadius * this.outerRadius) {
+            centerX = this.outerRadius * Math.cos(radian)
+            centerY = this.outerRadius * Math.sin(radian)
+        }
+        else {
+            centerX = Math.abs(sideX) > this.outerRadius ? this.outerRadius : Math.abs(sideX)
+            centerY = Math.abs(sideY) > this.outerRadius ? this.outerRadius : Math.abs(sideY)
+        }
+
+        if (sideY < 0) {
+            centerY = -Math.abs(centerY)
+        }
+        if (sideX < 0) {
+            centerX = -Math.abs(centerX)
+        }
+
+        // 计算角度（0-360）
+        if (sideX > 0 && sideY < 0) {
+            // < 90
+        }
+        else if (sideX < 0 && sideY < 0) {
+            // 90 ~ 180
+            angle = 180 - angle
+        }
+        else if (sideX < 0 && sideY > 0) {
+            // 180 ~ 270
+            angle = angle + 180
+        }
+        else if (sideX > 0 && sideY > 0) {
+            // 270 ~ 360
+            angle = 360 - angle
+        }
+
+        centerPoint.x = centerX
+        centerPoint.y = centerY
+        const power = this.getPower(centerPoint)
+
+        direction = this.getDirection(centerPoint)
+        this.inner.x = this.startPosition.x + centerPoint.x - this.innerRadius
+        this.inner.y = this.startPosition.y + centerPoint.y - this.innerRadius
+
+        this.settings.onChange?.({ angle, direction, power })
     }
 
     /**
@@ -290,5 +306,30 @@ export class Joystick extends Group {
         else {
             return Direction.TOP_RIGHT
         }
+    }
+
+    /**
+     * 手动触摸开始（用于多指场景）
+     */
+    public handleTouchStart() {
+        this.startDrag()
+    }
+
+    /**
+     * 手动触摸移动（用于多指场景）
+     * @param globalX 全局坐标 x
+     * @param globalY 全局坐标 y
+     */
+    public handleTouchMove(globalX: number, globalY: number) {
+        // 将全局坐标转换为相对于 Joystick 的坐标
+        const localPoint = this.getInnerPoint({ x: globalX, y: globalY })
+        this.updatePosition(localPoint.x, localPoint.y)
+    }
+
+    /**
+     * 手动触摸结束（用于多指场景）
+     */
+    public handleTouchEnd() {
+        this.endDrag()
     }
 }

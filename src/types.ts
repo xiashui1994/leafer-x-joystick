@@ -38,6 +38,8 @@ export interface JoystickSettings {
     outerScale?: { x: number; y: number }
     /** 内圈缩放 */
     innerScale?: { x: number; y: number }
+    /** 多指触摸模式（启用后需手动调用 handleTouchStart/Move/End 方法） */
+    multiTouch?: boolean
     /** 摇杆变化回调 */
     onChange?: (data: JoystickChangeEvent) => void
     /** 开始拖拽回调 */

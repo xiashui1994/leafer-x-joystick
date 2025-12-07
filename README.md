@@ -9,6 +9,7 @@
 - 🎨 支持自定义外观
 - 📦 轻量级，无额外依赖
 - 💪 TypeScript 支持
+- 🖐️ 支持多指触摸模式
 
 ## 安装
 
@@ -76,6 +77,150 @@ const joystick = new Joystick({
 })
 ```
 
+## 多指触摸模式
+
+在游戏等需要多指同时操作的场景中,可以启用多指触摸模式。启用后需要手动调用触摸方法。
+
+### 推荐方式:配合 leafer-x-multitouch 插件使用
+
+推荐使用 [leafer-x-multitouch](https://www.npmjs.com/package/leafer-x-multitouch) 插件来简化多指触摸的处理:
+
+```typescript
+import { Leafer, Rect } from 'leafer-ui'
+import { Joystick } from 'leafer-x-joystick'
+import { MultiTouch } from 'leafer-x-multitouch'
+
+const leafer = new Leafer({ view: window })
+
+// 创建多指触控管理器
+const multiTouch = new MultiTouch(leafer)
+
+// 绑定触摸事件
+window.addEventListener('touchstart', (e) => multiTouch.handleTouchStart(e))
+window.addEventListener('touchmove', (e) => multiTouch.handleTouchMove(e))
+window.addEventListener('touchend', (e) => multiTouch.handleTouchEnd(e))
+
+// 创建左侧摇杆(启用多指模式)
+const leftJoystick = new Joystick({
+  multiTouch: true,  // 启用多指模式,禁用自动事件
+  onChange: (data) => {
+    console.log('左摇杆:', data.angle, data.direction, data.power)
+  },
+})
+leftJoystick.x = 100
+leftJoystick.y = 500
+leafer.add(leftJoystick)
+
+// 为摇杆注册触摸处理
+multiTouch.register(leftJoystick, {
+  onStart: (touch, data) => {
+    leftJoystick.handleTouchStart()
+  },
+  onMove: (touch, data) => {
+    leftJoystick.handleTouchMove(touch.clientX, touch.clientY)
+  },
+  onEnd: (touch, data) => {
+    leftJoystick.handleTouchEnd()
+  },
+})
+
+// 创建右侧按钮
+const buttonA = new Rect({
+  x: 600,
+  y: 500,
+  width: 80,
+  height: 80,
+  fill: '#ff6b6b',
+  cornerRadius: 40,
+})
+leafer.add(buttonA)
+
+// 为按钮注册触摸处理
+multiTouch.register(buttonA, {
+  onStart: () => {
+    console.log('按钮 A 按下')
+  },
+  onEnd: () => {
+    console.log('按钮 A 释放')
+  },
+})
+```
+
+### 手动方式：自行处理触摸事件
+
+如果不使用 `leafer-x-multitouch` 插件，也可以手动处理触摸事件：
+
+```typescript
+import { Leafer } from 'leafer-ui'
+import { Joystick } from 'leafer-x-joystick'
+
+const leafer = new Leafer({ view: window })
+
+const joystick = new Joystick({
+  multiTouch: true,
+  onChange: (data) => {
+    console.log('摇杆:', data.angle, data.direction, data.power)
+  },
+})
+
+joystick.x = 100
+joystick.y = 100
+leafer.add(joystick)
+
+// 手动处理触摸事件
+let activeTouch = null
+
+window.addEventListener('touchstart', (e) => {
+  for (const touch of e.touches) {
+    const pickResult = leafer.pick({ x: touch.clientX, y: touch.clientY })
+    if (pickResult && isJoystick(pickResult.target)) {
+      activeTouch = touch.identifier
+      joystick.handleTouchStart()
+      break
+    }
+  }
+})
+
+window.addEventListener('touchmove', (e) => {
+  for (const touch of e.touches) {
+    if (touch.identifier === activeTouch) {
+      joystick.handleTouchMove(touch.clientX, touch.clientY)
+      break
+    }
+  }
+})
+
+window.addEventListener('touchend', (e) => {
+  for (const touch of e.changedTouches) {
+    if (touch.identifier === activeTouch) {
+      joystick.handleTouchEnd()
+      activeTouch = null
+      break
+    }
+  }
+})
+
+// 辅助函数：检查是否是摇杆或其子元素
+function isJoystick(element) {
+  let current = element
+  while (current && current !== leafer) {
+    if (current === joystick) return true
+    current = current.parent
+  }
+  return false
+}
+```
+
+### 手动触摸方法
+
+当启用 `multiTouch: true` 时，需要手动调用以下方法：
+
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `handleTouchStart()` | 无 | 开始触摸 |
+| `handleTouchMove(globalX, globalY)` | 全局坐标 x, y | 移动触摸 |
+| `handleTouchEnd()` | 无 | 结束触摸 |
+
 ## API
 
 ### JoystickSettings
@@ -86,6 +231,7 @@ const joystick = new Joystick({
 | `inner` | `UI` | 内圈元素（可选） |
 | `outerScale` | `{ x: number, y: number }` | 外圈缩放（可选） |
 | `innerScale` | `{ x: number, y: number }` | 内圈缩放（可选） |
+| `multiTouch` | `boolean` | 多指触摸模式（可选，默认 `false`） |
 | `onChange` | `(data: JoystickChangeEvent) => void` | 摇杆变化回调（可选） |
 | `onStart` | `() => void` | 开始拖拽回调（可选） |
 | `onEnd` | `() => void` | 结束拖拽回调（可选） |
